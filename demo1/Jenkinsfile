@@ -1,0 +1,76 @@
+pipeline {
+    agent any
+
+    tools {
+        jdk 'JDK 21' // Use the name you configured in Jenkins
+        maven 'Maven 3.9.9' // Ensure this matches the name in Jenkins
+
+    }
+
+    environment {
+        SONAR_HOST_URL = 'http://100.94.240.223:9000' // SonarQube server URL
+        SONAR_AUTH_TOKEN = credentials('matching-microservice-jenkins') // SonarQube token stored in Jenkins credentials
+    }
+
+    stages {
+        // Stage 1: Checkout code from GitHub
+        stage('Checkout') {
+            steps {
+                git branch: 'main', url: 'https://github.com/IBTISSAMLAKHOUIL/Devsecops.git'
+            }
+        }
+
+        // Stage 2: Build the Spring Boot application
+        stage('Build') {
+            steps {
+                dir('demo1') { // Change to the 'demo1' directory
+                    sh 'mvn clean package'
+                }
+            }
+        }
+
+        // Stage 3: Run Unit Tests
+        stage('Unit Test') {
+            steps {
+                dir('demo1') { // Change to the 'demo1' directory
+                    sh 'mvn test'
+                }
+            }
+            post {
+                success {
+                    echo 'Unit tests passed!'
+                }
+                failure {
+                    echo 'Unit tests failed!'
+                }
+            }
+        }
+        // Stage 4: OWASP Dependency-Check
+                stage('OWASP Dependency-Check') {
+                    steps {
+                        dependencyCheck additionalArguments: '--project "matching-microservice" --scan "demo1" --format "ALL"', odcInstallation: 'DP-Check'
+                        dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
+                    }
+                }
+
+        // Stage 5: SonarQube Analysis
+        stage('SonarQube Analysis') {
+            steps {
+                dir('demo1') {
+                    withSonarQubeEnv('Sonar') { // Use the SonarQube server name configured in Jenkins
+                        sh 'mvn sonar:sonar -Dsonar.projectKey=matching-microservice -Dsonar.projectName=annonce-microservice'
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo 'Pipeline completed successfully!'
+        }
+        failure {
+            echo 'Pipeline failed!'
+        }
+    }
+}
